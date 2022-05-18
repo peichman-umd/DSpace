@@ -13,6 +13,11 @@ set -e
 # Replace the ${APACHE_SERVER_NAME} placeholder in our shibboleth2.xml with the current value of the
 # $APACHE_SERVER_NAME environment variable.
 sed -i "s/\${APACHE_SERVER_NAME}/$APACHE_SERVER_NAME/g" /etc/shibboleth/shibboleth2.xml
+sed -i "s;\${SP_ENTITY_ID};$SP_ENTITY_ID;g" /etc/shibboleth/shibboleth2.xml
+sed -i "s/\${HANDLER_SSL}/$HANDLER_SSL/g" /etc/shibboleth/shibboleth2.xml
+sed -i "s/\${HANDLER_SECURE_STR}/$HANDLER_SECURE_STR/g" /etc/shibboleth/shibboleth2.xml
+sed -i "s/\${IDP_ENTITY_ID}/$IDP_ENTITY_ID/g" /etc/shibboleth/shibboleth2.xml
+sed -i "s;\${IDP_METADATA_URL};$IDP_METADATA_URL;g" /etc/shibboleth/shibboleth2.xml
 
 # Start the Shibboleth daemon
 /etc/init.d/shibd start

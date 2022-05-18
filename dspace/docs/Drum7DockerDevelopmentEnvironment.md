@@ -3,6 +3,10 @@
 This document contains instructions for building DRUM 7 dspace environment
 using docker.
 
+## Prerequisites
+
+- Add `127.0.0.1 drum-local` to your `/etc/hosts` file.
+
 ## Development Setup
 
 1. Clone the Git repository and switch to the directory:
@@ -20,6 +24,7 @@ using docker.
     cd dspace/src/main/docker/dspace-postgres-pgcrypto
     docker build -t docker.lib.umd.edu/dspace-postgres:latest .
     cd -
+    docker compose build dspaceshib
     ```
 
 3. Create the local configuration file
@@ -62,7 +67,7 @@ Also, we can start the dspace container and the dependencies (db & solr) in sepa
 
 ```bash
 # Start the db and solr container in detached mode
-docker compose -p d7 up -d dspacedb dspacesolr
+docker compose -p d7 up -d dspacedb dspacesolr dspaceshib
 
 # Start the dspace container
 docker compose -p d7 up dspace

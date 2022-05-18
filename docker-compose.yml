@@ -120,6 +120,34 @@ services:
       precreate-core statistics /opt/solr/server/solr/configsets/statistics
       cp -r -u /opt/solr/server/solr/configsets/statistics/* statistics
       exec solr -f
+  dspaceshib:
+    container_name: dspaceshib
+    depends_on:
+      - dspace
+    image: docker.lib.umd.edu/dspace-shibboleth:latest
+    build:
+      # Must be relative to root, so that it can be built alongside [src]/docker-compose.yml
+      context: ./dspace/src/main/docker/dspace-shibboleth
+    networks:
+      dspacenet:
+    ports:
+      - published: 18082
+        target: 18082
+    stdin_open: true
+    tty: true
+    volumes:
+    # Mount the drum-local-vhost config
+    - ./dspace/src/main/docker/dspace-shibboleth/drum-local-vhost.conf:/etc/apache2/sites-available/dspace-vhost.conf
+    environment:
+      # Default to using "localhost" for Apache & Shibboleth
+      # However, you can override this via the "DSPACE_HOSTNAME" environment variable.
+      # e.g., if using ngrok.com as a proxy, set to ngrok.io server: "DSPACE_HOSTNAME=[random-string].ngrok.io"
+      APACHE_SERVER_NAME: drum-local:18082
+      SP_ENTITY_ID: drum-local:18082
+      HANDLER_SSL: false
+      HANDLER_SECURE_STR: ' '
+      IDP_ENTITY_ID: urn:mace:incommon:umd.edu
+      IDP_METADATA_URL: https://shib.idm.umd.edu/shibboleth-idp/shibboleth
 volumes:
   assetstore:
   pgdata:

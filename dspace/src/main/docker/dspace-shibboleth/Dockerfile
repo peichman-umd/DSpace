@@ -19,6 +19,11 @@ ENV APACHE_LOCK_DIR /var/lock/apache2
 ENV APACHE_LOG_DIR /var/log/apache2
 ENV APACHE_PID_FILE /var/run/apache2/apache2.pid
 ENV APACHE_SERVER_NAME localhost
+ENV SP_ENTITY_ID https://localhost/shibboleth
+ENV HANDLER_SSL true
+ENV HANDLER_SECURE_STR secure;
+ENV IDP_ENTITY_ID https://samltest.id/saml/idp
+ENV IDP_METADATA_URL https://samltest.id/saml/idp
 
 # Ensure Apache2, mod_shib & shibboleth daemon are installed.
 # Also install ssl-cert to provide a local SSL cert for use with Apache
