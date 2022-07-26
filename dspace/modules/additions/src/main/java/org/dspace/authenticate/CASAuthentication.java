@@ -1,19 +1,23 @@
 package org.dspace.authenticate;
 
+import static org.dspace.core.LogHelper.getHeader;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.log4j.Logger;
+import edu.yale.its.tp.cas.client.ProxyTicketValidator;
+import edu.yale.its.tp.cas.client.ServiceTicketValidator;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.dspace.authenticate.factory.AuthenticateServiceFactory;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.core.Context;
-import org.dspace.core.LogHelper;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.factory.EPersonServiceFactory;
@@ -22,9 +26,7 @@ import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 
-import edu.yale.its.tp.cas.client.ProxyTicketValidator;
 // we use the Java CAS client
-import edu.yale.its.tp.cas.client.ServiceTicketValidator;
 
 /**
  * Authenticator for Central Authentication Service (CAS).
@@ -37,7 +39,7 @@ import edu.yale.its.tp.cas.client.ServiceTicketValidator;
 
 public class CASAuthentication implements AuthenticationMethod {
     /** log4j category */
-    private static final Logger log = Logger.getLogger(CASAuthentication.class);
+    private static final Logger log = LogManager.getLogger(CASAuthentication.class);
 
     private static String casServiceValidate; // URL to validate ST tickets
 
@@ -57,8 +59,9 @@ public class CASAuthentication implements AuthenticationMethod {
 
     public final static String CAS_USER = "dspace.current.user.ldap";
 
-    private final static ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
-    
+    private final static ConfigurationService configurationService =
+        DSpaceServicesFactory.getInstance().getConfigurationService();
+
     /**
      * Predicate, can new user automatically create EPerson. Checks
      * configuration value. You'll probably want this to be true to take
@@ -108,25 +111,27 @@ public class CASAuthentication implements AuthenticationMethod {
      * @return One of: SUCCESS, BAD_CREDENTIALS, NO_SUCH_USER, BAD_ARGS
      */
     @Override
-    public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request) throws SQLException {
+    public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
+            throws SQLException {
         final String ticket = request.getParameter("ticket");
         final String service = request.getRequestURL().toString();
-        log.info(LogHelper.getHeader(context, "login", " ticket: " + ticket));
-        log.info(LogHelper.getHeader(context, "login", "service: " + service));
+        log.info(getHeader(context, "login", " ticket: " + ticket));
+        log.info(getHeader(context, "login", "service: " + service));
 
         // CAS ticket
         if (ticket != null) {
             try {
                 // Determine CAS validation URL
-                String validate = configurationService.getProperty("drum.cas.validate.url");
-                log.info(LogHelper.getHeader(context, "login", "CAS validate:  " + validate));
-                if (validate == null) {
-                    throw new ServletException("No CAS validation URL specified. You need to set property 'drum.cas.validate.url'");
+                final String validateURL = configurationService.getProperty("drum.cas.validate.url");
+                log.info(getHeader(context, "login", "CAS validate:  " + validateURL));
+                if (validateURL == null) {
+                    throw new ServletException(
+                        "No CAS validation URL specified. You need to set property 'drum.cas.validate.url'");
                 }
 
                 // Validate ticket (it is assumed that CAS validator returns the
                 // user network ID)
-                String netid = validate(service, ticket, validate);
+                final String netid = validate(service, ticket, validateURL);
                 if (netid == null) {
                     throw new ServletException("Ticket '" + ticket + "' is not valid");
                 }
@@ -138,6 +143,7 @@ public class CASAuthentication implements AuthenticationMethod {
                 try {
                     eperson = ePersonService.findByNetid(context, netid.toLowerCase());
                 } catch (SQLException ignored) {
+                    log.warn("ignored SQL exception");
                 }
                 // if they entered a netid that matches an eperson, and they are
                 // allowed to log in
@@ -153,16 +159,11 @@ public class CASAuthentication implements AuthenticationMethod {
                     // Logged in OK.
 
                     context.setCurrentUser(eperson);
-                    log.info(LogHelper.getHeader(context, "authenticate", "type=CAS"));
+                    log.info(getHeader(context, "authenticate", "type=CAS"));
                 } else {
                     // the user does not exist in DSpace
                     // TODO: create an eperson
-                    eperson = createEperson(
-                        context, request, netid, "peichman@umd.edu", "Peter", "Eichman");
-                    if (eperson == null) {
-                        return NO_SUCH_USER;
-                    }
-                    context.setCurrentUser(eperson);
+                    return NO_SUCH_USER;
                 }
                 return SUCCESS;
 
@@ -183,7 +184,8 @@ public class CASAuthentication implements AuthenticationMethod {
      * @param ticket
      *            the opaque service ticket (ST) to validate
      */
-    public static String validate(String service, String ticket, String validateURL) throws IOException, ServletException {
+    public static String validate(String service, String ticket, String validateURL)
+            throws IOException, ServletException {
         ServiceTicketValidator stv;
         String validateUrl = null;
 
@@ -237,15 +239,32 @@ public class CASAuthentication implements AuthenticationMethod {
      */
     @Override
     public String loginPageURL(Context context, HttpServletRequest request, HttpServletResponse response) {
+        // Determine the client redirect URL, where to redirect after authenticating.
+        String redirectUrl = null;
+        if (request.getHeader("Referer") != null && StringUtils.isNotBlank(request.getHeader("Referer"))) {
+            redirectUrl = request.getHeader("Referer");
+        } else if (request.getHeader("X-Requested-With") != null
+            && StringUtils.isNotBlank(request.getHeader("X-Requested-With"))) {
+            redirectUrl = request.getHeader("X-Requested-With");
+        }
+
+        // Determine the server return URL, where CAS will send the user after authenticating.
+        // We need it to trigger the CASLoginFilter in order to extract the user's information,
+        // locally authenticate them & then redirect back to the UI.
+        String returnURL = configurationService.getProperty("dspace.server.url") + "/api/authn/cas"
+            + ((redirectUrl != null) ? "?redirectUrl=" + redirectUrl : "");
+
         // Determine CAS server URL
-        final String authServer = configurationService
-                .getProperty("drum.cas.server.url");
+        final String authServer = configurationService.getProperty("drum.cas.server.url");
         final String origUrl = (String) request.getSession().getAttribute("interrupted.request.url");
-        final String service = (origUrl != null ? origUrl : request.getRequestURL().toString()).replace("login", "cas-login");
+        // final String service = (origUrl != null ? origUrl : request.getRequestURL().toString())
+        // .replace("login", "cas-login");
         log.info("CAS server:  " + authServer);
+        //log.info("service URL: " + service);
+        log.info("Return URL: " + returnURL);
 
         // Redirect to CAS server
-        return response.encodeRedirectURL(authServer + "?service=" + service);
+        return response.encodeRedirectURL(authServer + "?service=" + returnURL);
     }
 
     @Override
@@ -258,7 +277,8 @@ public class CASAuthentication implements AuthenticationMethod {
         return true;
     }
 
-    protected EPerson createEperson(Context context, HttpServletRequest request, String netid, String email, String fname, String lname) throws SQLException, AuthorizeException {
+    protected EPerson createEperson(Context context, HttpServletRequest request, String netid, String email,
+                                    String fname, String lname) throws SQLException, AuthorizeException {
         // copied from the ShibAuthentication class
         // Turn off authorizations to create a new user
         context.turnOffAuthorisationSystem();

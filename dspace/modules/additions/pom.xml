@@ -253,6 +253,12 @@
       </dependency>
       <dependency>
          <groupId>org.dspace</groupId>
+         <artifactId>dspace-server-webapp</artifactId>
+         <type>jar</type>
+         <classifier>classes</classifier>
+      </dependency>
+      <dependency>
+         <groupId>org.dspace</groupId>
          <artifactId>dspace-api</artifactId>
          <type>test-jar</type>
          <scope>test</scope>
@@ -341,7 +347,12 @@
          <artifactId>mockito-inline</artifactId>
          <scope>test</scope>
       </dependency>
-
+      <dependency>
+         <groupId>org.springframework.security</groupId>
+         <artifactId>spring-security-core</artifactId>
+         <version>5.2.2.RELEASE</version>
+         <scope>compile</scope>
+      </dependency>
    </dependencies>
 
 </project>
